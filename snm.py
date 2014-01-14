@@ -4,11 +4,12 @@ from useful.mstring import s
 from useful.log import Log
 
 from subprocess import call, check_output, Popen, TimeoutExpired
+from functools import partial
 from threading import Thread
 from time import sleep
 import shlex
 
-
+Log.set_global_level('debug')
 log = Log("main")
 
 def run(cmd):
@@ -98,19 +99,30 @@ class WiFiScanner(Thread):
 
 
 class WPA(Ether):
-  wpa_tpl = """
-  network={
-    ssid="{ssid}"
-    key_mgmt=None
-  }
-  """
-  def create_network(self):
-    ...
-    
-  def __setattr__(self):
-
   def __init__(self, *args, **kwargs):
     super().__init__(*args, **kwargs)
+    self.log = Log("WPA(%s)"%self.ifname)
+    self.netid = None
+
+  def connect_open(self, ssid):
+    self.netid = int(self.execute("add_network"))
+    self.log.debug("created network %s" % self.netid)
+    self.ssid(ssid)
+    self.key_mgmt(None)
+
+  def __getattr__(self, param):
+    return partial(self.execute, 'set_network', self.netid, param)
+
+  def execute(self, *cmd):
+    mapping = {type(None): lambda s: "NONE",
+               int: str,
+               str: lambda s: '"'+s+'"'}
+    cmd = " ".join([mapping[type(s)](s) for s in cmd])
+    cmd = s("wpa_cli -i ${self.ifname} ${cmd}")
+    self.log.debug("executing %s"%cmd)
+    res = run(cmd).strip()
+    self.log.debug("result: %s"%res)
+    return res
 
   def connect(self):
     super().connect()
@@ -119,13 +131,16 @@ class WPA(Ether):
     super().disconnect()
 
 
+
 if __name__ == '__main__':
   # ether = Ether("testtap", "Test")
   # ether.reconnect()
   # dhcp = DHCP("testtap")
   # dhcp.reconnect()
 
-  scanner = WiFiScanner("wlan0")
-  scanner.start()
+  # scanner = WiFiScanner("wlan0")
+  # scanner.start()
   # scanner.join()
-  wifi = WiFi('unitn', ifname='wlan0')
+  # wifi = WiFi('unitn', ifname='wlan0')
+  wpa = WPA('wlan0')
+  wpa.connect_open('unitn')
