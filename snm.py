@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
 from useful.mystruct import Struct
 from useful.mstring import s
-from useful.log import Log
+from useful.log import Log, set_global_level
 
-from subprocess import call, check_output, Popen, TimeoutExpired
-from functools import partial
-from threading import Thread
+from threading import Thread, Lock
 from time import sleep
 import shlex
 
-Log.set_global_level('debug')
+
+from collections import OrderedDict, defaultdict
+from socket import socket, AF_UNIX, SOCK_DGRAM
+from os import unlink, getpid
+import atexit 
+import sys
+
+
+set_global_level('debug')
 log = Log("main")
 
 def run(cmd):
@@ -98,49 +104,127 @@ class WiFiScanner(Thread):
       sleep(5)
 
 
-class WPA(Ether):
-  def __init__(self, *args, **kwargs):
-    super().__init__(*args, **kwargs)
-    self.log = Log("WPA(%s)"%self.ifname)
-    self.netid = None
+def parse_status(msg):
+  return OrderedDict(s.split('=') for s in msg.strip().splitlines())
+PID = getpid()
 
-  def connect_open(self, ssid):
-    self.netid = int(self.execute("add_network"))
-    self.log.debug("created network %s" % self.netid)
-    self.ssid(ssid)
-    self.key_mgmt(None)
+class Network:
+  pass
 
-  def __getattr__(self, param):
-    return partial(self.execute, 'set_network', self.netid, param)
+class OpenNetwork(Network):
+  def __init__(self, ssid, bssid=None):
+    self.ssid = ssid
+    self.bssid = bssid
+  def wpacfg(self):
+    cmds = []
+    cmds.append("ssid \"%s\""%self.ssid)
+    cmds.append("key_mgmt NONE")
+    if self.bssid:
+      cmd.append("bssid %s"%self.ssid)
+    return cmds
+  def on_connect(self):
+    TODO
+  def on_disconnect(self):
+    TODO
 
-  def execute(self, *cmd):
-    mapping = {type(None): lambda s: "NONE",
-               int: str,
-               str: lambda s: '"'+s+'"'}
-    cmd = " ".join([mapping[type(s)](s) for s in cmd])
-    cmd = s("wpa_cli -i ${self.ifname} ${cmd}")
-    self.log.debug("executing %s"%cmd)
-    res = run(cmd).strip()
-    self.log.debug("result: %s"%res)
-    return res
+events = defaultdict(list)
 
-  def connect(self):
-    super().connect()
+class WPAMonitor(Thread):
+  def __init__(self, ifname):
+    self.log = Log("monitor")
+    mon_path = "/tmp/wpa_mon_%s"%PID
+    atexit.register(lambda: unlink(mon_path))
+    server_path = "/var/run/wpa_supplicant/%s" % ifname
+    self.log.debug("connecting to %s" % server_path)
+    self.socket = socket(AF_UNIX, SOCK_DGRAM)
+    self.socket.bind(mon_path)
+    self.socket.connect(server_path)
+    self.events = defaultdict(list)
+    super().__init__(daemon=True)
 
-  def disconnect(self):
-    super().disconnect()
+  def run(self):
+    self.socket.send(b"AUTOSCAN periodic:10")
+    self.socket.send(b"ATTACH")
 
+    while True:
+      try:
+        data = self.socket.recv(65535).strip().decode('ascii', 'ignore')
+        self.log.debug("got %s" % data)
+        if data == 'OK':
+          continue
+        if data == 'FAIL':
+          raise Exception("Failure detected")
+        mask, evtype = data.split('>',1)
+        if evtype == 'CTRL-EVENT-SCAN-RESULTS':
+          print("scan results")
+          for cb in events['scan_results']:
+            cb()
+        else:
+          self.log.info("unknown event %s"%data)
+      except Exception as e:
+        self.log.critical(e)
+        sys.exit(e)
+
+
+class WPAClient:
+  def __init__(self, ifname):
+    self.log = Log("WPA %s"%ifname)
+    client_path = "/tmp/wpa_client_%s"%PID
+    atexit.register(lambda: unlink(client_path))
+    server_path = "/var/run/wpa_supplicant/%s" % ifname
+    self.socket = socket(AF_UNIX, SOCK_DGRAM)
+    self.socket.bind(client_path)
+    self.socket.connect(server_path)
+    self.lock = Lock()
+
+  def send(self, msg):
+    self.log.debug("sending: %s"%msg)
+    if isinstance(msg, str):
+      msg = msg.encode('ascii', errors='ignore')
+    self.socket.send(msg)
+
+  def recv(self, bufsize=65535):
+    r = self.socket.recv(bufsize)
+    return r.strip().decode('ascii', errors='ignore')
+
+  def run(self, cmd, check=True):
+    with self.lock:
+      self.send(cmd)
+      r = self.recv()
+      self.log.debug("received: %s"%r)
+      if check:
+        assert r not in ['FAIL', 'UNKNOWN COMMAND']
+    return r
+
+  def status(self):
+    raw_status = self.run("STATUS", check=False)
+    return parse_status(raw_status)
+
+  def scan_results(self):
+    result = []
+    raw_results = self.run("SCAN_RESULTS")
+    for line in raw_results.splitlines()[1:]:
+      bssid, freq, signal, flags, ssid = line.split()
+      r = Struct(ssid=ssid, signal=signal, bssid=bssid, freq=freq, flags=flags)
+      result.append(r)
+    return result
+
+  def connect(self, network):
+    nid = self.run("ADD_NETWORK")
+    for cmd in network.wpacfg():
+      self.run(s("SET_NETWORK ${nid} ${cmd}"))
+    self.run(s("SELECT_NETWORK ${nid}"))
+    self.run(s("ENABLE_NETWORK ${nid}"))
 
 
 if __name__ == '__main__':
-  # ether = Ether("testtap", "Test")
-  # ether.reconnect()
-  # dhcp = DHCP("testtap")
-  # dhcp.reconnect()
-
-  # scanner = WiFiScanner("wlan0")
-  # scanner.start()
-  # scanner.join()
-  # wifi = WiFi('unitn', ifname='wlan0')
-  wpa = WPA('wlan0')
-  wpa.connect_open('unitn')
+  ifname = 'wlan0'
+  wpa = WPAClient(ifname)
+  def scan_cb():
+    print("FIRE!")
+    print(wpa.scan_results())
+  events['scan_results'].append(scan_cb)
+  monitor = WPAMonitor(ifname)
+  monitor.start()
+  unitn = OpenNetwork('unitn')
+  monitor.join()
