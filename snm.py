@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 from useful.mystruct import Struct
 from useful.mstring import s
 from useful.log import Log, set_global_level
@@ -174,6 +175,7 @@ class WPAClient:
     server_path = "/var/run/wpa_supplicant/%s" % ifname
     self.socket = socket(AF_UNIX, SOCK_DGRAM)
     self.socket.bind(client_path)
+    self.log.debug("using %s wpa socket..." % server_path)
     self.socket.connect(server_path)
     self.lock = Lock()
 
@@ -227,4 +229,12 @@ if __name__ == '__main__':
   monitor = WPAMonitor(ifname)
   monitor.start()
   unitn = OpenNetwork('unitn')
-  monitor.join()
+
+  from gi.repository import Gtk
+  builder = Gtk.Builder()
+  builder.add_from_file("interface.glade")
+  window = builder.get_object("MainWindow")
+  window.connect("delete-event", Gtk.main_quit)
+  window.show_all()
+  Gtk.main()
+  # monitor.join()
