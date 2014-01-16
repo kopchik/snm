@@ -12,7 +12,7 @@ import shlex
 from collections import OrderedDict, defaultdict
 from socket import socket, AF_UNIX, SOCK_DGRAM
 from os import unlink, getpid
-import atexit 
+import atexit
 import sys
 
 
@@ -145,6 +145,7 @@ class WPAMonitor(Thread):
 
   def run(self):
     self.socket.send(b"AUTOSCAN periodic:10")
+    self.socket.send(b"AP_SCAN 1")
     self.socket.send(b"ATTACH")
 
     while True:
@@ -222,10 +223,6 @@ class WPAClient:
 if __name__ == '__main__':
   ifname = 'wlan0'
   wpa = WPAClient(ifname)
-  def scan_cb():
-    print("FIRE!")
-    print(wpa.scan_results())
-  events['scan_results'].append(scan_cb)
   monitor = WPAMonitor(ifname)
   monitor.start()
   unitn = OpenNetwork('unitn')
@@ -236,5 +233,13 @@ if __name__ == '__main__':
   window = builder.get_object("MainWindow")
   window.connect("delete-event", Gtk.main_quit)
   window.show_all()
+
+  netstore = builder.get_object("NetStore")
+  def on_scan_results():
+    results = wpa.scan_results()
+    netstore.clear()
+    for r in results:
+      netstore.append([int(r.signal), r.ssid, r.bssid])
+  events['scan_results'].append(on_scan_results)
+
   Gtk.main()
-  # monitor.join()
