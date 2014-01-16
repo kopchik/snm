@@ -15,53 +15,168 @@
   <object class="GtkWindow" id="MainWindow">
     <property name="can_focus">False</property>
     <child>
-      <object class="GtkScrolledWindow" id="scrolledwindow1">
+      <object class="GtkBox" id="box1">
         <property name="visible">True</property>
-        <property name="can_focus">True</property>
-        <property name="shadow_type">in</property>
+        <property name="can_focus">False</property>
+        <property name="orientation">vertical</property>
         <child>
-          <object class="GtkTreeView" id="NetView">
+          <object class="GtkButtonBox" id="buttonbox1">
+            <property name="visible">True</property>
+            <property name="can_focus">False</property>
+            <property name="layout_style">start</property>
+            <child>
+              <object class="GtkToggleButton" id="togglebutton1">
+                <property name="label" translatable="yes">Connect</property>
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="receives_default">True</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">0</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkButton" id="scanButton">
+                <property name="label" translatable="yes">scan</property>
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="receives_default">True</property>
+                <property name="relief">none</property>
+              </object>
+              <packing>
+                <property name="expand">False</property>
+                <property name="fill">True</property>
+                <property name="position">1</property>
+              </packing>
+            </child>
+            <child>
+              <object class="GtkEntry" id="entry1">
+                <property name="width_request">400</property>
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="editable">False</property>
+                <property name="text" translatable="yes">80% Gigil 192.168.1.37</property>
+              </object>
+              <packing>
+                <property name="expand">True</property>
+                <property name="fill">True</property>
+                <property name="position">2</property>
+              </packing>
+            </child>
+          </object>
+          <packing>
+            <property name="expand">False</property>
+            <property name="fill">True</property>
+            <property name="position">0</property>
+          </packing>
+        </child>
+        <child>
+          <object class="GtkScrolledWindow" id="scrolledwindow1">
             <property name="visible">True</property>
             <property name="can_focus">True</property>
-            <property name="model">NetStore</property>
-            <property name="enable_grid_lines">both</property>
-            <child internal-child="selection">
-              <object class="GtkTreeSelection" id="treeview-selection1"/>
-            </child>
+            <property name="shadow_type">in</property>
             <child>
-              <object class="GtkTreeViewColumn" id="treeviewcolumn2">
-                <property name="title" translatable="yes">Signal</property>
+              <object class="GtkTreeView" id="NetView">
+                <property name="visible">True</property>
+                <property name="can_focus">True</property>
+                <property name="model">NetStore</property>
+                <property name="search_column">0</property>
+                <property name="enable_grid_lines">both</property>
+                <child internal-child="selection">
+                  <object class="GtkTreeSelection" id="treeview-selection"/>
+                </child>
                 <child>
-                  <object class="GtkCellRendererText" id="rendSignal">
-                    <property name="alignment">right</property>
+                  <object class="GtkTreeViewColumn" id="treeviewcolumn2">
+                    <property name="title" translatable="yes">Signal</property>
+                    <child>
+                      <object class="GtkCellRendererText" id="rendSignal"/>
+                      <attributes>
+                        <attribute name="text">0</attribute>
+                      </attributes>
+                    </child>
                   </object>
-                  <attributes>
-                    <attribute name="text">0</attribute>
-                  </attributes>
+                </child>
+                <child>
+                  <object class="GtkTreeViewColumn" id="ssidColumn">
+                    <property name="title" translatable="yes">SSID</property>
+                    <child>
+                      <object class="GtkCellRendererText" id="rendSSID"/>
+                      <attributes>
+                        <attribute name="text">1</attribute>
+                      </attributes>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkTreeViewColumn" id="treeviewcolumn1">
+                    <property name="title" translatable="yes">BSSID</property>
+                    <child>
+                      <object class="GtkCellRendererText" id="rendBSSID"/>
+                      <attributes>
+                        <attribute name="text">2</attribute>
+                      </attributes>
+                    </child>
+                  </object>
                 </child>
               </object>
             </child>
+          </object>
+          <packing>
+            <property name="expand">True</property>
+            <property name="fill">True</property>
+            <property name="position">1</property>
+          </packing>
+        </child>
+      </object>
+    </child>
+  </object>
+  <object class="GtkScrolledWindow" id="scrolledwindow2">
+    <property name="visible">True</property>
+    <property name="can_focus">True</property>
+    <property name="shadow_type">in</property>
+    <child>
+      <object class="GtkTreeView" id="NetView1">
+        <property name="visible">True</property>
+        <property name="can_focus">True</property>
+        <property name="model">NetStore</property>
+        <property name="enable_grid_lines">both</property>
+        <child internal-child="selection">
+          <object class="GtkTreeSelection" id="treeview-selection1"/>
+        </child>
+        <child>
+          <object class="GtkTreeViewColumn" id="treeviewcolumn3">
+            <property name="title" translatable="yes">Signal</property>
             <child>
-              <object class="GtkTreeViewColumn" id="ssidColumn">
-                <property name="title" translatable="yes">SSID</property>
-                <child>
-                  <object class="GtkCellRendererText" id="rendSSID"/>
-                  <attributes>
-                    <attribute name="text">1</attribute>
-                  </attributes>
-                </child>
+              <object class="GtkCellRendererText" id="rendSignal1">
+                <property name="alignment">right</property>
               </object>
+              <attributes>
+                <attribute name="text">0</attribute>
+              </attributes>
             </child>
+          </object>
+        </child>
+        <child>
+          <object class="GtkTreeViewColumn" id="ssidColumn1">
+            <property name="title" translatable="yes">SSID</property>
             <child>
-              <object class="GtkTreeViewColumn" id="treeviewcolumn1">
-                <property name="title" translatable="yes">BSSID</property>
-                <child>
-                  <object class="GtkCellRendererText" id="rendBSSID"/>
-                  <attributes>
-                    <attribute name="text">2</attribute>
-                  </attributes>
-                </child>
-              </object>
+              <object class="GtkCellRendererText" id="rendSSID1"/>
+              <attributes>
+                <attribute name="text">1</attribute>
+              </attributes>
+            </child>
+          </object>
+        </child>
+        <child>
+          <object class="GtkTreeViewColumn" id="treeviewcolumn4">
+            <property name="title" translatable="yes">BSSID</property>
+            <child>
+              <object class="GtkCellRendererText" id="rendBSSID1"/>
+              <attributes>
+                <attribute name="text">2</attribute>
+              </attributes>
             </child>
           </object>
         </child>
