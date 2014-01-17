@@ -242,4 +242,6 @@ if __name__ == '__main__':
       netstore.append([int(r.signal), r.ssid, r.bssid])
   events['scan_results'].append(on_scan_results)
 
+  import signal
+  signal.signal(signal.SIGINT, signal.SIG_DFL)
   Gtk.main()
