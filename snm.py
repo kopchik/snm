@@ -2,7 +2,7 @@
 
 from useful.mystruct import Struct
 from useful.mstring import s
-from useful.log import Log, set_global_level
+from useful.log import Log
 
 from threading import Thread, Lock
 from time import sleep
@@ -11,30 +11,48 @@ import shlex
 
 from collections import OrderedDict, defaultdict
 from socket import socket, AF_UNIX, SOCK_DGRAM
+from subprocess import Popen, call, check_output
 from os import unlink, getpid
 import atexit
+import time
 import sys
 
 
-set_global_level('debug')
 log = Log("main")
 
+###########
+# UTILITY #
+###########
+
 def run(cmd):
+  log("run('%s')" % cmd)
   res = check_output(shlex.split(cmd)).decode(errors='ignore')
-  log(cmd)
   log(res)
   return res
 
+
 def run_(cmd):
+  log("run_('%s')" % cmd)
   return call(shlex.split(cmd))
 
+
 def runbg(cmd):
+  log("runbg('%s')" % cmd)
   return Popen(shlex.split(cmd))
 
 
-class Conn:
-  def __init__(self, ifname, descr=None):
-    self.ifname = ifname
+class Dispatcher:
+  def __init__(self):
+    pass
+  def register(self):
+    pass
+  def unregister(self):
+    pass
+
+
+class Connection:
+  def __init__(self, interface, descr=None):
+    self.interface = interface
     self.descr = descr
 
   def reconnect(self):
@@ -48,35 +66,51 @@ class Conn:
     raise NotImplementedError
 
 
-class Ether(Conn):
-  def connect(self, promisc=False):
-    self.promisc = promisc
-    run(s("ifconfig ${self.ifname} up"))
+class Interface:
+  def __init__(self, name):
+    self.name = name
+
+  def up(self):
+    raise NotImplementedError
+
+  def down(self):
+    raise NotImplementedError
+
+
+class Ether(Interface):
+  def __init__(self, promisc=False, **kwargs):
+    super().__init__(**kwargs)
+    self.promisc=False
+
+  def up(self, promisc=False):
+    run(s("ifconfig ${self.name} up"))
+    if promisc or self.promisc:
+      run(s("ifconfig ${self.name} promisc on"))
+
+  def down(self):
+    run_(s("ifconfig ${self.name} down"))
+    run_(s("ifconfig ${self.name} 0.0.0.0"))
     if self.promisc:
-      run(s("ifconfig ${self.ifname} promisc on"))
-
-  def disconnect(self):
-    run_(s("ifconfig ${self.ifname} down"))
-    run_(s("ifconfig ${self.ifname} 0.0.0.0"))
-    if self.promisc:
-      run(s("ifconfig ${self.ifname} promisc off"))
+      run(s("ifconfig ${self.name} promisc off"))
 
 
-class DHCP(Conn):
-  def __init__(self, *args, **kwargs):
+class DHCP(Connection):
+  def __init__(self, **kwargs):
+    super().__init__(**kwargs)
     self.pipe = None
-    super().__init__(*args, **kwargs)
 
   def connect(self):
-    self.pipe = runbg(s("dhcpcd -t 3 ${self.ifname}"))
+    self.interface.up()
+    self.pipe = runbg(s("dhcpcd -t 5 -B ${self.interface.name}"))
 
   def disconnect(self):
     if self.pipe:
-      run_(s("dhcpcd ${self.ifname} -k"))
+      run_(s("dhcpcd ${self.interface.name} -k"))
       try:
         self.pipe.wait(3)
       except TimeoutExpired:
         self.pipe.kill()
+    self.interface.down()
 
 
 class WiFiScanner(Thread):
@@ -221,27 +255,30 @@ class WPAClient:
 
 
 if __name__ == '__main__':
-  ifname = 'wlan0'
-  wpa = WPAClient(ifname)
-  monitor = WPAMonitor(ifname)
-  monitor.start()
-  unitn = OpenNetwork('unitn')
-
-  from gi.repository import Gtk
-  builder = Gtk.Builder()
-  builder.add_from_file("interface.glade")
-  window = builder.get_object("MainWindow")
-  window.connect("delete-event", Gtk.main_quit)
-  window.show_all()
-
-  netstore = builder.get_object("NetStore")
-  def on_scan_results():
-    results = wpa.scan_results()
-    netstore.clear()
-    for r in results:
-      netstore.append([int(r.signal), r.ssid, r.bssid])
-  events['scan_results'].append(on_scan_results)
-
-  import signal
-  signal.signal(signal.SIGINT, signal.SIG_DFL)
-  Gtk.main()
+  conn = DHCP(interface=Ether(name='eth0'))
+  conn.connect()
+  time.sleep(100000)
+#  ifname = 'wlan0'
+#  wpa = WPAClient(ifname)
+#  monitor = WPAMonitor(ifname)
+#  monitor.start()
+#  unitn = OpenNetwork('unitn')
+#
+#  from gi.repository import Gtk
+#  builder = Gtk.Builder()
+#  builder.add_from_file("interface.glade")
+#  window = builder.get_object("MainWindow")
+#  window.connect("delete-event", Gtk.main_quit)
+#  window.show_all()
+#
+#  netstore = builder.get_object("NetStore")
+#  def on_scan_results():
+#    results = wpa.scan_results()
+#    netstore.clear()
+#    for r in results:
+#      netstore.append([int(r.signal), r.ssid, r.bssid])
+#  events['scan_results'].append(on_scan_results)
+#
+#  import signal
+#  signal.signal(signal.SIGINT, signal.SIG_DFL)
+#  Gtk.main()
