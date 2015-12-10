@@ -79,8 +79,8 @@ def monitor_ifs(loop, hook, interfaces, poll=3):
             if new != old:
                 on_ifchange(old, new)
                 old = new
-            else:
-                log.debug("no newinterfaces")
+            # else:
+            #     log.debug("no newinterfaces")
             await asyncio.sleep(poll)
     loop.run_until_complete(monitor())
 
@@ -95,12 +95,20 @@ class Nethook(Hook):
     def waitpid(self, pid, cb):
         self.sigchld_handlers[pid].add(cb)
 
-    def on_sigchld(self):
+    async def wait(self, event):
+        ev = asyncio.Event()
+        def cb():
+            ev.set()
+        self.register(event, cb)
+        ev.wait()
+        self.unregister(event, cb)
+
+    def on_sigchld(self, sig, frame):
         pid, st = os.waitpid(-1, os.WNOHANG)
         if not pid:
             return log.error("spurious SIGCHLD")
         if pid not in self.sigchld_handlers:
-            return log.error(
+            return log.debug(
                 "pid %s is not monitored (status: %s)" %
                 (pid, st))
         for cb in self.sigchld_handlers[pid]:
@@ -110,10 +118,6 @@ class Nethook(Hook):
                 log.critical(
                     "SIGCHLD: error in cb %s (pid: %s, st: %s): %s" %
                     (cb, pid, st, err))
-
-    async def run(self):
-        while True:
-            await asyncio.sleep(1)
 
 
 class Common:
@@ -177,20 +181,23 @@ class DHCP(Connection):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.pipe = None
+        self.hook.add(('add', self.interface), self.connect)
+        self.hook.add(('rm', self.interface), self.disconnect)
 
-    def connect(self):
+    def connect(self, ev=None):
         self.interface.up()
         self.pipe = runbg(s("dhcpcd -t 5 -B ${self.interface.name}"))
-        self.dispatcher.waitpid(self.pipe.pid, lambda: log.debug("dhcp died"))
-        self.dispatcher.waitpid(self.pipe.pid, self.disconnect)
+        self.hook.waitpid(self.pipe.pid, lambda ev: log.debug("dhcp died"))
+        self.hook.waitpid(self.pipe.pid, self.disconnect)
 
-    def disconnect(self):
+    def disconnect(self, ev=None):
         if self.pipe:
             run_(s("dhcpcd ${self.interface.name} -k"))
             try:
                 self.pipe.wait(3)
             except TimeoutExpired:
                 self.pipe.kill()
+        self.pipe = None
         # self.interface.down()
 
 
@@ -226,8 +233,6 @@ def parse_status(msg):
     return OrderedDict(s.split('=') for s in msg.strip().splitlines())
 
 
-PID = getpid()
-
 
 class Network:
     pass
@@ -261,7 +266,7 @@ class WPAMonitor(Thread):
 
     def __init__(self, ifname):
         self.log = Log("monitor")
-        mon_path = "/tmp/wpa_mon_%s" % PID
+        mon_path = "/tmp/wpa_mon_%s" % getpid()
         atexit.register(lambda: unlink(mon_path))
         server_path = "/var/run/wpa_supplicant/%s" % ifname
         self.log.debug("connecting to %s" % server_path)
@@ -301,7 +306,7 @@ class WPAClient:
 
     def __init__(self, ifname):
         self.log = Log("WPA %s" % ifname)
-        client_path = "/tmp/wpa_client_%s" % PID
+        client_path = "/tmp/wpa_client_%s" % getpid()
         atexit.register(lambda: unlink(client_path))
         server_path = "/var/run/wpa_supplicant/%s" % ifname
         self.socket = socket(AF_UNIX, SOCK_DGRAM)
