@@ -118,20 +118,16 @@ class Nethook(Hook):
                 log.critical(
                     "SIGCHLD: error in cb %s (pid: %s, st: %s): %s" %
                     (cb, pid, st, err))
+        del self.sigchld_handlers[pid]
 
 
-class Common:
+class Connection:
 
-    def __init__(self, hook=None):
-        self.hook = hook
-
-
-class Connection(Common):
-
-    def __init__(self, interface, descr=None, **kwargs):
+    def __init__(self, interface, descr=None, hook=None, **kwargs):
         super().__init__(**kwargs)
         self.interface = interface
         self.descr = descr
+        self.hook = hook
 
     def reconnect(self):
         self.disconnect()
@@ -189,6 +185,9 @@ class DHCP(Connection):
         self.pipe = runbg(s("dhcpcd -t 5 -B ${self.interface.name}"))
         self.hook.waitpid(self.pipe.pid, lambda ev: log.debug("dhcp died"))
         self.hook.waitpid(self.pipe.pid, self.disconnect)
+
+    def on_error(self):
+      TODO
 
     def disconnect(self, ev=None):
         if self.pipe:
@@ -273,7 +272,6 @@ class WPAMonitor(Thread):
         self.socket = socket(AF_UNIX, SOCK_DGRAM)
         self.socket.bind(mon_path)
         self.socket.connect(server_path)
-        self.events = defaultdict(list)
         super().__init__(daemon=True)
 
     def run(self):
