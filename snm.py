@@ -53,6 +53,7 @@ def periodic(loop, period, f, *args, **kwargs):
         while True:
             f(*args, **kwargs)
             await asyncio.sleep(period)
+
     loop.run_until_complete(wrap())
 
 
@@ -72,6 +73,7 @@ def monitor_ifs(loop, hook, interfaces, poll=3):
                 hook.fire(('add', iface))
 
     old = set()
+
     async def monitor():
         nonlocal old
         while True:
@@ -82,11 +84,11 @@ def monitor_ifs(loop, hook, interfaces, poll=3):
             # else:
             #     log.debug("no newinterfaces")
             await asyncio.sleep(poll)
+
     loop.run_until_complete(monitor())
 
 
 class Nethook(Hook):
-
     def __init__(self, loop):
         super().__init__()
         self.sigchld_handlers = defaultdict(set)
@@ -97,8 +99,10 @@ class Nethook(Hook):
 
     async def wait(self, event):
         ev = asyncio.Event()
+
         def cb():
             ev.set()
+
         self.register(event, cb)
         ev.wait()
         self.unregister(event, cb)
@@ -108,21 +112,18 @@ class Nethook(Hook):
         if not pid:
             return log.error("spurious SIGCHLD")
         if pid not in self.sigchld_handlers:
-            return log.debug(
-                "pid %s is not monitored (status: %s)" %
-                (pid, st))
+            return log.debug("pid %s is not monitored (status: %s)" %
+                             (pid, st))
         for cb in self.sigchld_handlers[pid]:
             try:
                 cb(st)
             except Exception as err:
-                log.critical(
-                    "SIGCHLD: error in cb %s (pid: %s, st: %s): %s" %
-                    (cb, pid, st, err))
+                log.critical("SIGCHLD: error in cb %s (pid: %s, st: %s): %s" %
+                             (cb, pid, st, err))
         del self.sigchld_handlers[pid]
 
 
 class Connection:
-
     def __init__(self, interface, descr=None, hook=None, **kwargs):
         super().__init__(**kwargs)
         self.interface = interface
@@ -141,8 +142,9 @@ class Connection:
 
 
 interfaces = {}
-class Interface:
 
+
+class Interface:
     def __init__(self, name):
         self.name = name
         interfaces[name] = self
@@ -155,7 +157,6 @@ class Interface:
 
 
 class Ether(Interface):
-
     def __init__(self, promisc=False, **kwargs):
         super().__init__(**kwargs)
         self.promisc = False
@@ -173,7 +174,6 @@ class Ether(Interface):
 
 
 class DHCP(Connection):
-
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.pipe = None
@@ -187,7 +187,7 @@ class DHCP(Connection):
         self.hook.waitpid(self.pipe.pid, self.disconnect)
 
     def on_error(self):
-      TODO
+        TODO
 
     def disconnect(self, ev=None):
         if self.pipe:
@@ -201,7 +201,6 @@ class DHCP(Connection):
 
 
 class WiFiScanner(Thread):
-
     def __init__(self, ifname, interval=5):
         self.ifname = ifname
         self.result = []
@@ -232,13 +231,11 @@ def parse_status(msg):
     return OrderedDict(s.split('=') for s in msg.strip().splitlines())
 
 
-
 class Network:
     pass
 
 
 class OpenNetwork(Network):
-
     def __init__(self, ssid, bssid=None):
         self.ssid = ssid
         self.bssid = bssid
@@ -262,7 +259,6 @@ events = defaultdict(list)
 
 
 class WPAMonitor(Thread):
-
     def __init__(self, ifname):
         self.log = Log("monitor")
         mon_path = "/tmp/wpa_mon_%s" % getpid()
@@ -301,7 +297,6 @@ class WPAMonitor(Thread):
 
 
 class WPAClient:
-
     def __init__(self, ifname):
         self.log = Log("WPA %s" % ifname)
         client_path = "/tmp/wpa_client_%s" % getpid()
@@ -364,6 +359,7 @@ def main():
     conn = DHCP(interface=iface, hook=hook)
     monitor_ifs(loop, hook, interfaces)
     time.sleep(100000)
+
 
 if __name__ == '__main__':
     main()
